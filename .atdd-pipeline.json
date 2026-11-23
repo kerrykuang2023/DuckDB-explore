@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "tracker": {
+    "kind": "github",
+    "repo": "kerrykuang2023/DuckDB-explore"
+  },
+  "paths": {
+    "specs": "specs/",
+    "tests": {
+      "use-case": "tests/use-case/",
+      "e2e": "tests/e2e/",
+      "ui": "tests/ui/"
+    },
+    "context": "CONTEXT.md",
+    "adr": "docs/adr/"
+  },
+  "commits": "conventional",
+  "reviewers": {
+    "mode": "sequential"
+  },
+  "stage3_mode": "sequential",
+  "trunk_branch": "main",
+  "integration_branch_pattern": "atdd/{us_slug}/integration",
+  "auto_merge": {
+    "enabled": true,
+    "idle_window_minutes": 5,
+    "max_fix_iterations": 3,
+    "watch_timeout_minutes": 60,
+    "merge_method": "squash",
+    "bot_logins": [
+      "coderabbitai",
+      "coderabbitai[bot]",
+      "github-actions[bot]",
+      "codex",
+      "codex-bot"
+    ]
+  },
+  "verify": {
+    "start_command": "streamlit run app.py",
+    "base_url": "http://localhost:8501",
+    "ready_check": "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8501')\""
+  }
+}
