@@ -61,6 +61,29 @@ st.caption("不用写 SQL——点选数据源、字段和聚合，DuckDB 自动
 
 con = get_connection()
 
+# ── R-01 核心：联邦查询演示（一条 SQL 跨多个异构数据源） ────────────────
+st.subheader("🦆 联邦查询演示（R-01 核心）")
+st.write(
+    "真正的联邦 = **一条 SQL 同时查询多个异构数据源**。下面这条 SQL 同时查 "
+    "edu_orders（SQLite）、Walmart_Sales（SQLite）、courses_dim（CSV）三个源。"
+)
+
+if st.button("执行跨源联邦查询（UNION ALL 三源）", key="federation"):
+    df, ms = timed_query(
+        con,
+        """
+        SELECT 'edu_orders(SQLite)' AS source, COUNT(*) AS cnt FROM edu.courses
+        UNION ALL
+        SELECT 'Walmart_Sales(SQLite)', COUNT(DISTINCT Store) FROM wlm.walmart_sales
+        UNION ALL
+        SELECT 'courses_dim(CSV)', COUNT(*) FROM read_csv_auto('{csv}')
+        """.replace("{csv}", CSV_DIM.replace("\\", "/")),
+    )
+    st.dataframe(df, use_container_width=True)
+    st.success(f"联邦查询成功：一条 SQL 跨 3 个异构源（SQLite + SQLite + CSV），耗时 {ms:.1f} ms")
+
+st.divider()
+
 # ── 主区：按数据源展示能力 ──────────────────────────────────────────────
 if sources == "edu_orders（SQLite）":
     tab1, tab2, tab3 = st.tabs(["📊 无ETL直查", "🔗 跨源JOIN", "⚡ 性能对比"])
@@ -114,8 +137,8 @@ if sources == "edu_orders（SQLite）":
             st.success("列式向量化：所有查询毫秒级完成，无需外部服务")
 
 elif sources == "Walmart_Sales（SQLite）":
-    st.subheader("R-01 联邦 + R-04 性能")
-    st.write("连接 Walmart_Sales（6435 行），列式聚合秒级。")
+    st.subheader("R-03 无 ETL + R-04 性能")
+    st.write("连接 Walmart_Sales（6435 行，ATTACH 单源），列式聚合秒级。")
     if st.button("Store 总周销售额 TOP5", key="wlm_top"):
         df, ms = timed_query(
             con,
@@ -148,14 +171,17 @@ st.subheader("R-06 SQL 透明可查")
 st.caption("你点选操作，DuckDB 实际执行的 SQL 透明展示（只读，无需手写）：")
 with st.expander("查看示例 SQL（只读）", expanded=False):
     st.code(
-        """-- 跨源 JOIN（SQLite + CSV）：
+        """-- 联邦查询（一条 SQL 跨 3 个异构源）：
+SELECT 'edu_orders(SQLite)' AS source, COUNT(*) FROM edu.courses
+UNION ALL
+SELECT 'Walmart_Sales(SQLite)', COUNT(DISTINCT Store) FROM wlm.walmart_sales
+UNION ALL
+SELECT 'courses_dim(CSV)', COUNT(*) FROM read_csv_auto('data/courses_dim.csv')
+
+-- 跨源 JOIN（SQLite + CSV）：
 SELECT d.course_name, COUNT(*) AS order_cnt
 FROM edu.orders o
 JOIN read_csv_auto('data/courses_dim.csv') d ON o.course_id = d.course_id
-GROUP BY d.course_name
-
--- 联邦查询（Walmart TOP5）：
-SELECT Store, SUM(Weekly_Sales) AS total
-FROM wlm.walmart_sales GROUP BY Store ORDER BY total DESC LIMIT 5""",
+GROUP BY d.course_name""",
         language="sql",
     )
