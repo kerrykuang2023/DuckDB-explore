@@ -23,6 +23,20 @@ def get_connection() -> duckdb.DuckDBPyConnection:
     con.execute("INSTALL sqlite; LOAD sqlite;")
     con.execute(f"ATTACH '{EDU_DB}' AS edu (TYPE sqlite);")
     con.execute(f"ATTACH '{WLM_DB}' AS wlm (TYPE sqlite);")
+    # 高级特性演示数据（递归 CTE / ASOF JOIN）
+    emp = os.path.join(DATA_DIR, "employees.parquet").replace("\\", "/")
+    con.execute(f"CREATE TABLE employees AS SELECT * FROM read_parquet('{emp}')")
+    con.execute("""
+        CREATE TABLE quotes (symbol VARCHAR, quote_time TIMESTAMP, price DECIMAL(10,2));
+        CREATE TABLE trades (trade_time TIMESTAMP, symbol VARCHAR, qty INTEGER);
+        INSERT INTO quotes VALUES
+          ('AAPL','2024-01-01 09:00:00',180.00),('AAPL','2024-01-01 09:05:00',181.50),
+          ('AAPL','2024-01-01 09:10:00',182.00),('GOOG','2024-01-01 09:00:00',140.00),
+          ('GOOG','2024-01-01 09:06:00',141.00);
+        INSERT INTO trades VALUES
+          ('2024-01-01 09:03:00','AAPL',100),('2024-01-01 09:08:00','AAPL',50),
+          ('2024-01-01 09:04:00','GOOG',30);
+    """)
     return con
 
 
@@ -69,8 +83,8 @@ st.title("DuckDB 能力全链路探索")
 st.caption("不用写 SQL——每个案例点选触发，结果旁附对应 SQL，便于理解底层")
 
 # ── 顶层 Tabs 组织能力 ─────────────────────────────────────────────────
-tab_fed, tab_ana, tab_file, tab_ddl, tab_perf = st.tabs(
-    ["🦆 联邦查询", "📊 分析能力", "📁 文件格式与压缩", "🏗️ 建表与表类型", "⚡ 性能与导出"]
+tab_fed, tab_ana, tab_file, tab_ddl, tab_perf, tab_adv = st.tabs(
+    ["🦆 联邦查询", "📊 分析能力", "📁 文件格式与压缩", "🏗️ 建表与表类型", "⚡ 性能与导出", "🧩 高级特性"]
 )
 
 # ═══════════════ Tab 1: 联邦查询 ═══════════════
@@ -239,3 +253,38 @@ duckdb.sql("SELECT category, SUM(amount) FROM df GROUP BY category").df()''',
         language="python",
     )
     st.caption("嵌入式：内存 DataFrame 直接当表查，与 Python 生态零拷贝互操作")
+
+# ═══════════════ Tab 6: 高级特性 ═══════════════
+with tab_adv:
+    st.subheader("递归 CTE：层级遍历")
+    st.write("从员工D(10)往上找所有上级，一条递归 SQL 遍历组织架构。")
+    sql_cte = """
+WITH RECURSIVE chain(id, name, manager_id, depth) AS (
+    SELECT id, name, manager_id, 0 FROM employees WHERE id = 10
+    UNION ALL
+    SELECT e.id, e.name, e.manager_id, c.depth + 1
+    FROM employees e JOIN chain c ON e.id = c.manager_id
+)
+SELECT id, name, depth FROM chain ORDER BY depth"""
+    if st.button("跑递归 CTE（找上级链）", key="cte"):
+        df, ms = timed_query(con, sql_cte)
+        show(sql_cte, df, ms, note="WITH RECURSIVE 从员工10递归向上，一次 SQL 遍历层级（无需图数据库）")
+
+    st.divider()
+    st.subheader("ASOF JOIN：时间序列 as-of 关联")
+    st.write("每笔交易关联最近一次报价（trade_time >= quote_time 的最近一条）。")
+    sql_asof = """
+SELECT t.trade_time, t.symbol, t.qty, q.quote_time, q.price
+FROM trades t
+ASOF JOIN quotes q ON t.symbol = q.symbol AND t.trade_time >= q.quote_time"""
+    if st.button("跑 ASOF JOIN", key="asof"):
+        df, ms = timed_query(con, sql_asof)
+        show(sql_asof, df, ms, note="ASOF JOIN 把每笔交易精确对齐到最近报价，金融/监控场景刚需")
+
+    st.divider()
+    st.subheader("JSON 查询：半结构化数据")
+    st.write("直接读嵌套 JSON，用 json_extract_string 提取字段。")
+    sql_json = f"SELECT event_id, json_extract_string(user, '$.name') AS name, json_extract_string(user, '$.vip') AS vip FROM read_json_auto('{os.path.join(DATA_DIR, 'events.json').replace(chr(92), '/')}')"
+    if st.button("读 JSON 并提取嵌套字段", key="json"):
+        df, ms = timed_query(con, sql_json)
+        show(sql_json, df, ms, note="read_json_auto 直接读 JSON 文件，json_extract_string 提取嵌套字段")

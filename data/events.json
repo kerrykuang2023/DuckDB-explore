@@ -1,0 +1,48 @@
+[
+  {
+    "event_id": 1,
+    "user": {
+      "name": "张三",
+      "vip": true
+    },
+    "action": "purchase",
+    "items": [
+      {
+        "id": 101,
+        "price": 199.0
+      },
+      {
+        "id": 102,
+        "price": 299.0
+      }
+    ]
+  },
+  {
+    "event_id": 2,
+    "user": {
+      "name": "李四",
+      "vip": false
+    },
+    "action": "view",
+    "items": [
+      {
+        "id": 101,
+        "price": 199.0
+      }
+    ]
+  },
+  {
+    "event_id": 3,
+    "user": {
+      "name": "王五",
+      "vip": true
+    },
+    "action": "purchase",
+    "items": [
+      {
+        "id": 103,
+        "price": 399.0
+      }
+    ]
+  }
+]
